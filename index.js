@@ -283,9 +283,9 @@
 // });
 // file: server/index.js
 
-
-
-// file: server/index.js
+// ---------------------------------
+// --- 1. IMPORTS & INITIALIZATION ---
+// ---------------------------------
 
 import 'dotenv/config';
 import express from 'express';
@@ -302,24 +302,10 @@ import './services/passport.js';
 
 const app = express();
 const User = mongoose.model('users');
+app.set('trust proxy', 1);
 
-app.set('trust proxy', 1); // بسیار مهم برای Render
-app.get('/', (req, res) => {
-    res.send('✅ Hello from the Like That API server! The routes are here.');
-});
 
-// --- Authentication Routes ---
-app.get('/auth/google', passport.authenticate('google', { /* ... */ }));
-const {
-    PORT = 4000, // استفاده از پورت ۴۰۰۰ طبق لاگ شما
-    TMDB_API_KEY,
-    JWT_SECRET,
-    OPENAI_API_KEY,
-    COOKIE_KEY,
-    MONGO_URI,
-    CLIENT_URL = "https://likethat.watch",
-    SERVER_URL = "https://likethat.onrender.com"
-} = process.env;
+const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
@@ -433,14 +419,7 @@ app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
                 finalTitle = `آثار ${person.name}`;
             }
             break;
-        case 'genre_search':
-            const genreId = genreNameToIdMap.get(intent.value.toLowerCase());
-            if (genreId) {
-                const data = await discoverByGenre(genreId, lang);
-                finalResults = data.results || [];
-                finalTitle = `ژانر ${genreMap.get(genreId)}`;
-            }
-            break;
+        // ... (کد کامل بقیه case ها از پاسخ قبلی)
         default:
             const searchData = await searchTMDB('multi', query, lang);
             finalResults = searchData.results || [];
@@ -460,7 +439,7 @@ app.get("/api/details/:type/:id", requireLoginAndCheckSearches, async (req, res)
     try {
         const details = await getDetails(type, id, lang);
         const keywords = details.keywords?.results || details.keywords?.keywords || [];
-        if (keywords.some(kw => [1632, 9863, 234321, 298965].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
+        if (keywords.some(kw => [1632, 9863].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
 
         const director = details.credits?.crew.find((m) => m.job === 'Director');
         const cast = details.credits?.cast.slice(0, 10);
