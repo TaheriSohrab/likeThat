@@ -312,7 +312,8 @@ const {
     OPENAI_API_KEY,
     COOKIE_KEY,
     MONGO_URI,
-    CLIENT_URL = 'http://localhost:3000'
+    CLIENT_URL = "https://likethat.watch",
+    SERVER_URL = "https://likethat.onrender.com"
 } = process.env;
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
