@@ -303,9 +303,18 @@ import './services/passport.js';
 const app = express();
 const User = mongoose.model('users');
 
-const { PORT = 3001, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
+app.set('trust proxy', 1); // بسیار مهم برای Render
 
-app.set('trust proxy', 1);
+const {
+    PORT = 4000, // استفاده از پورت ۴۰۰۰ طبق لاگ شما
+    TMDB_API_KEY,
+    JWT_SECRET,
+    OPENAI_API_KEY,
+    COOKIE_KEY,
+    MONGO_URI,
+    CLIENT_URL = 'http://localhost:3000'
+} = process.env;
+
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
 app.use(session({ secret: COOKIE_KEY, resave: false, saveUninitialized: false, cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } }));
@@ -426,7 +435,6 @@ app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
                 finalTitle = `ژانر ${genreMap.get(genreId)}`;
             }
             break;
-        // ... (بقیه case ها)
         default:
             const searchData = await searchTMDB('multi', query, lang);
             finalResults = searchData.results || [];
