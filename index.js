@@ -283,9 +283,9 @@
 // });
 // file: server/index.js
 
-// ---------------------------------
-// --- 1. IMPORTS & INITIALIZATION ---
-// ---------------------------------
+
+
+// file: server/index.js
 
 import 'dotenv/config';
 import express from 'express';
@@ -302,11 +302,10 @@ import './services/passport.js';
 
 const app = express();
 const User = mongoose.model('users');
+
+const { PORT = 3001, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
+
 app.set('trust proxy', 1);
-
-
-const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
-
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
 app.use(session({ secret: COOKIE_KEY, resave: false, saveUninitialized: false, cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } }));
@@ -419,7 +418,15 @@ app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
                 finalTitle = `آثار ${person.name}`;
             }
             break;
-        // ... (کد کامل بقیه case ها از پاسخ قبلی)
+        case 'genre_search':
+            const genreId = genreNameToIdMap.get(intent.value.toLowerCase());
+            if (genreId) {
+                const data = await discoverByGenre(genreId, lang);
+                finalResults = data.results || [];
+                finalTitle = `ژانر ${genreMap.get(genreId)}`;
+            }
+            break;
+        // ... (بقیه case ها)
         default:
             const searchData = await searchTMDB('multi', query, lang);
             finalResults = searchData.results || [];
@@ -439,7 +446,7 @@ app.get("/api/details/:type/:id", requireLoginAndCheckSearches, async (req, res)
     try {
         const details = await getDetails(type, id, lang);
         const keywords = details.keywords?.results || details.keywords?.keywords || [];
-        if (keywords.some(kw => [1632, 9863].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
+        if (keywords.some(kw => [1632, 9863, 234321, 298965].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
 
         const director = details.credits?.crew.find((m) => m.job === 'Director');
         const cast = details.credits?.cast.slice(0, 10);
