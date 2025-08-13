@@ -286,6 +286,11 @@
 // ---------------------------------
 // --- 1. IMPORTS & INITIALIZATION ---
 // ---------------------------------
+
+
+
+// file: server/index.js
+
 import 'dotenv/config';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -295,6 +300,8 @@ import jsonwebtoken from 'jsonwebtoken';
 import fetch from 'node-fetch';
 import cors from 'cors';
 import OpenAI from 'openai';
+import path from 'path'; // برای سرو کردن فایل‌های استاتیک
+import { fileURLToPath } from 'url';
 
 import './models/User.js';
 import './services/passport.js';
@@ -303,7 +310,7 @@ const app = express();
 const User = mongoose.model('users');
 app.set('trust proxy', 1);
 
-const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
+const { PORT = 10000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL, SERVER_URL } = process.env;
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
@@ -314,6 +321,7 @@ app.use(passport.session());
 mongoose.connect(MONGO_URI).then(() => console.log('✅ MongoDB connected.')).catch(err => console.error('❌ MongoDB connection error:', err));
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
+// --- Helper Functions (Genre Management, TMDB, AI) ---
 let genreMap = new Map(), genreNameToIdMap = new Map();
 async function initializeGenres() {
     try {
@@ -329,14 +337,12 @@ async function initializeGenres() {
     } catch (e) { console.error("❌ Failed to initialize genres:", e); }
 }
 const mapGenresToMovies = (movies) => movies.map(m => ({ ...m, genres: m.genre_ids ? m.genre_ids.map(id => genreMap.get(id)).filter(Boolean) : [] }));
-
 const searchTMDB = async (type, query, lang) => (await fetch(`https://api.themoviedb.org/3/search/${type}?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=${lang}&include_adult=false`)).json();
 const discoverByGenre = async (id, lang) => (await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${id}&sort_by=popularity.desc&language=${lang}&include_adult=false`)).json();
 const findMoviesWithActor = async (id, lang) => (await fetch(`https://api.themoviedb.org/3/person/${id}/combined_credits?api_key=${TMDB_API_KEY}&language=${lang}`)).json();
 const findSimilarMovies = async (id, lang) => (await fetch(`https://api.themoviedb.org/3/movie/${id}/similar?api_key=${TMDB_API_KEY}&language=${lang}&include_adult=false`)).json();
 const getDetails = async (type, id, lang) => (await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_API_KEY}&language=${lang}&append_to_response=credits,keywords`)).json();
 const discoverByCrew = async (personId, lang) => (await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_crew=${personId}&language=${lang}&sort_by=popularity.desc&include_adult=false`)).json();
-
 async function analyzeQueryIntent(query) {
     const prompt = `Analyze this user query to determine the intent and extract the key value. The query is likely in Persian. Query: "${query}". Possible intents: 'genre_search', 'actor_search', 'director_search', 'writer_search', 'composer_search', 'emotional_search', 'specific_movie_search', 'context_search', 'character_search'. Return JSON: { "type": "...", "value": "..." }. For 'emotional_search', translate the core theme to simple English keywords. For 'character_search', return the character name.`;
     try {
@@ -356,6 +362,7 @@ async function findMovieByContext(query, type = 'context') {
     } catch { return null; }
 }
 
+// --- Authentication Routes ---
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email', 'https://www.googleapis.com/auth/user.phonenumbers.read'] }));
 app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: `${CLIENT_URL}/login/failed` }), async (req, res) => {
     await User.findByIdAndUpdate(req.user.id, { isLoggedIn: true });
@@ -373,6 +380,7 @@ app.get('/api/current_user', async (req, res) => {
     } catch (err) { res.status(401).send(null); }
 });
 
+// --- Access Control Middleware ---
 const requireLoginAndCheckSearches = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     if (!authHeader?.startsWith('Bearer ')) return res.status(401).json({ error: 'You must log in!' });
@@ -393,7 +401,10 @@ const requireLoginAndCheckSearches = async (req, res, next) => {
     } catch (err) { return res.status(401).json({ error: 'Invalid Token' }); }
 };
 
-app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
+// --- Main API Routes ---
+app.use('/api', requireLoginAndCheckSearches); // Protect all API routes below this line
+
+app.post("/api/search", async (req, res) => {
     const { query } = req.body;
     const lang = 'fa-IR';
     let finalResults = [], finalTitle = "";
@@ -418,8 +429,8 @@ app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
             const personData = await searchTMDB('person', intent.value, lang);
             const person = personData.results?.[0];
             if (person) {
-                const data = await findMoviesWithActor(person.id, lang);
-                finalResults = [...(data.cast || []), ...(data.crew || [])].filter(i => i.poster_path).sort((a, b) => b.popularity - a.popularity);
+                const data = await discoverByCrew(person.id, lang);
+                finalResults = data.results || [];
                 finalTitle = `آثار ${person.name}`;
             }
             break;
@@ -458,14 +469,13 @@ app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
     res.json({ results: mapGenresToMovies(finalResults), title: finalTitle, userData: { subscriptionTier: req.user.subscriptionTier, searchesLeft: req.user.searchesLeft } });
 });
 
-app.get("/api/details/:type/:id", requireLoginAndCheckSearches, async (req, res) => {
+app.get("/api/details/:type/:id", async (req, res) => {
     const { type, id } = req.params;
     const lang = req.query.lang || 'fa-IR';
     try {
         const details = await getDetails(type, id, lang);
         const keywords = details.keywords?.results || details.keywords?.keywords || [];
         if (keywords.some(kw => [1632, 9863, 234321, 298965].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
-
         const director = details.credits?.crew.find((m) => m.job === 'Director');
         const cast = details.credits?.cast.slice(0, 10);
         const user = req.user;
@@ -477,6 +487,7 @@ app.get("/api/details/:type/:id", requireLoginAndCheckSearches, async (req, res)
     } catch (error) { res.status(404).json({error: "Details not found."}); }
 });
 
+// --- Public Route (Does NOT require login) ---
 app.get("/api/trending", async (req, res) => {
     try {
         const data = await (await fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_API_KEY}&language=fa-IR&include_adult=false`)).json();
@@ -484,6 +495,18 @@ app.get("/api/trending", async (req, res) => {
     } catch (error) { res.status(500).json({error: "Could not fetch trending movies."}); }
 });
 
+
+// --- SERVE REACT APP IN PRODUCTION ---
+if (process.env.NODE_ENV === 'production') {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
+    app.get('*', (req, res) => {
+        res.sendFile(path.resolve(__dirname, '..', 'client', 'build', 'index.html'));
+    });
+}
+
+// --- Server Startup ---
 app.listen(PORT, async () => {
     await initializeGenres();
     console.log(`✅ Server is running on port ${PORT}`);
