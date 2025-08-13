@@ -304,7 +304,12 @@ const app = express();
 const User = mongoose.model('users');
 
 app.set('trust proxy', 1); // بسیار مهم برای Render
+app.get('/', (req, res) => {
+    res.send('✅ Hello from the Like That API server! The routes are here.');
+});
 
+// --- Authentication Routes ---
+app.get('/auth/google', passport.authenticate('google', { /* ... */ }));
 const {
     PORT = 4000, // استفاده از پورت ۴۰۰۰ طبق لاگ شما
     TMDB_API_KEY,
