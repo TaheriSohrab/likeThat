@@ -305,7 +305,7 @@ const User = mongoose.model('users');
 app.set('trust proxy', 1);
 
 
-const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
+const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = "https://likethat.watch" } = process.env;
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
