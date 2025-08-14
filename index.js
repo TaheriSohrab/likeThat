@@ -282,7 +282,6 @@
 //     console.log(`✅ Server is running on http://localhost:${PORT}`);
 // });
 // file: server/index.js
-
 // ---------------------------------
 // --- 1. IMPORTS & INITIALIZATION ---
 // ---------------------------------
@@ -305,7 +304,7 @@ const User = mongoose.model('users');
 app.set('trust proxy', 1);
 
 
-const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'https://likethat.watch' } = process.env;
+const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
@@ -459,7 +458,12 @@ app.get("/api/trending", async (req, res) => {
     } catch (error) { res.status(500).json({error: "Could not fetch trending movies."}); }
 });
 
-app.listen(PORT, async () => {
+// app.listen(PORT, async () => {
+//     await initializeGenres();
+//     console.log(`✅ Server is running on port ${PORT}`);
+// });
+
+app.listen(PORT, '0.0.0.0', async () => {
     await initializeGenres();
-    console.log(`✅ Server is running on port ${PORT}`);
+    console.log(`✅ Server is running on port ${PORT} on host 0.0.0.0`);
 });
