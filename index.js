@@ -311,8 +311,8 @@ app.use(express.json());
 app.use(session({ secret: COOKIE_KEY, resave: false, saveUninitialized: false, cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } }));
 app.use(passport.initialize());
 app.use(passport.session());
-const GOOGLE_CALLBACK_URL= "http://localhost:4000/auth/google/callback"
-const CLIENT_URL="http://localhost:3000"
+const GOOGLE_CALLBACK_URL= "https://likethat.watch/auth/google/callback"
+const CLIENT_URL="https://likethat.watch"
 mongoose.connect(MONGO_URI).then(() => console.log('✅ MongoDB connected.')).catch(err => console.error('❌ MongoDB connection error:', err));
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
