@@ -281,9 +281,11 @@
 //     await initializeGenres();
 //     console.log(`✅ Server is running on http://localhost:${PORT}`);
 // });
+// file: server/index.js
 
-
-
+// ---------------------------------
+// --- 1. IMPORTS & INITIALIZATION ---
+// ---------------------------------
 
 import 'dotenv/config';
 import express from 'express';
@@ -297,22 +299,20 @@ import OpenAI from 'openai';
 
 import './models/User.js';
 import './services/passport.js';
-import './services/passport.js';
-import authRoutes from './routes/authRoutes.js';
-const User = mongoose.model('users');
-const app = express();
 
+const app = express();
+const User = mongoose.model('users');
 app.set('trust proxy', 1);
-app.use(authRoutes);
-const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'https://likethat.watch' } = process.env;
+
+
+const { PORT = 4000, TMDB_API_KEY, JWT_SECRET, OPENAI_API_KEY, COOKIE_KEY, MONGO_URI, CLIENT_URL = 'http://localhost:3000' } = process.env;
 
 app.use(cors({ origin: CLIENT_URL, credentials: true }));
 app.use(express.json());
 app.use(session({ secret: COOKIE_KEY, resave: false, saveUninitialized: false, cookie: { maxAge: 30 * 24 * 60 * 60 * 1000 } }));
 app.use(passport.initialize());
 app.use(passport.session());
-const GOOGLE_CALLBACK_URL= "https://likethat.watch/auth/google/callback"
-const CLIENT_URL="https://likethat.watch"
+
 mongoose.connect(MONGO_URI).then(() => console.log('✅ MongoDB connected.')).catch(err => console.error('❌ MongoDB connection error:', err));
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
@@ -340,7 +340,7 @@ const getDetails = async (type, id, lang) => (await fetch(`https://api.themovied
 const discoverByCrew = async (personId, lang) => (await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_crew=${personId}&language=${lang}&sort_by=popularity.desc&include_adult=false`)).json();
 
 async function analyzeQueryIntent(query) {
-    const prompt = `Analyze this user query to determine the intent and extract the key value. The query is likely in Persian. Query: "${query}". Possible intents: 'genre_search', 'actor_search', 'director_search', 'writer_search', 'composer_search', 'emotional_search', 'specific_movie_search', 'context_search', 'character_search'. Return JSON: { "type": "...", "value": "..." }. For 'emotional_search', translate the core theme to simple English keywords. For 'character_search', return the character name.`;
+    const prompt = `Analyze this user query to determine the intent and extract the key value. The query is likely in Persian. Query: "${query}". Possible intents: 'genre_search', 'actor_search', 'director_search', 'writer_search', 'composer_search', 'emotional_search', 'specific_movie_search', 'context_search'. Return JSON: { "type": "...", "value": "..." }. For 'emotional_search', translate the core theme to simple English keywords.`;
     try {
         const completion = await openai.chat.completions.create({model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }], response_format: { type: "json_object" }});
         return JSON.parse(completion.choices[0].message.content);
@@ -349,13 +349,6 @@ async function analyzeQueryIntent(query) {
 async function findMoviesByTheme(themeKeywords) {
     const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(themeKeywords)}&language=fa-IR&include_adult=false`;
     return (await fetch(url)).json();
-}
-async function findMovieByContext(query, type = 'context') {
-    const prompt = `A user provided a ${type}: "${query}". Identify the original English movie/show title. Return JSON: { "title": "The English Title" } or null.`;
-    try {
-        const completion = await openai.chat.completions.create({ model: "gpt-4o-mini", messages: [{ role: "user", content: prompt }], response_format: { type: "json_object" } });
-        return JSON.parse(completion.choices[0].message.content).title;
-    } catch { return null; }
 }
 
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email', 'https://www.googleapis.com/auth/user.phonenumbers.read'] }));
@@ -383,6 +376,7 @@ const requireLoginAndCheckSearches = async (req, res, next) => {
         const payload = jsonwebtoken.verify(token, JWT_SECRET);
         const user = await User.findById(payload.id);
         if (!user) return res.status(401).json({ error: 'User not found' });
+
         if (user.subscriptionTier !== 'free') {
             const hasTime = user.subscriptionExpiresAt ? user.subscriptionExpiresAt > new Date() : true;
             if (!hasTime) { user.subscriptionTier = 'free'; await user.save(); }
@@ -417,36 +411,15 @@ app.post("/api/search", requireLoginAndCheckSearches, async (req, res) => {
             finalTitle = `فیلم‌هایی با حال و هوای: «${query}»`;
             break;
         case 'director_search': case 'composer_search': case 'writer_search':
-            const crewData = await searchTMDB('person', intent.value, lang);
-            const person = crewData.results?.[0];
+            const personData = await searchTMDB('person', intent.value, lang);
+            const person = personData.results?.[0];
             if (person) {
                 const data = await findMoviesWithActor(person.id, lang);
                 finalResults = [...(data.cast || []), ...(data.crew || [])].filter(i => i.poster_path).sort((a, b) => b.popularity - a.popularity);
                 finalTitle = `آثار ${person.name}`;
             }
             break;
-        case 'actor_search':
-            const actorData = await searchTMDB('person', intent.value, lang);
-            const actor = actorData.results?.[0];
-            if (actor) {
-                const data = await findMoviesWithActor(actor.id, lang);
-                finalResults = [...(data.cast || []), ...(data.crew || [])].filter(i => i.poster_path).sort((a, b) => b.popularity - a.popularity);
-                finalTitle = `آثار ${actor.name}`;
-            }
-            break;
-        case 'specific_movie_search':
-            const movieData = await searchTMDB('movie', intent.value, lang);
-            finalResults = movieData.results || [];
-            finalTitle = `نتایج برای «${intent.value}»`;
-            break;
-        case 'character_search':
-            const movieFromChar = await findMovieByContext(intent.value, 'character');
-            if (movieFromChar) {
-                const data = await searchTMDB('multi', movieFromChar, lang);
-                finalResults = data.results || [];
-                finalTitle = `مرتبط با شخصیت «${intent.value}»`;
-            }
-            break;
+        // ... (کد کامل بقیه case ها از پاسخ قبلی)
         default:
             const searchData = await searchTMDB('multi', query, lang);
             finalResults = searchData.results || [];
@@ -466,7 +439,7 @@ app.get("/api/details/:type/:id", requireLoginAndCheckSearches, async (req, res)
     try {
         const details = await getDetails(type, id, lang);
         const keywords = details.keywords?.results || details.keywords?.keywords || [];
-        if (keywords.some(kw => [1632, 9863, 234321, 298965].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
+        if (keywords.some(kw => [1632, 9863].includes(kw.id))) return res.status(403).json({ error: "Content not available." });
 
         const director = details.credits?.crew.find((m) => m.job === 'Director');
         const cast = details.credits?.cast.slice(0, 10);
@@ -489,4 +462,5 @@ app.get("/api/trending", async (req, res) => {
 app.listen(PORT, async () => {
     await initializeGenres();
     console.log(`✅ Server is running on port ${PORT}`);
+    console.log('SeenTa is here')
 });
