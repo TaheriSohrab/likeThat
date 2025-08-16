@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Movie AI recommendation server",
   "main": "index.js",
+  "type":"module",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
@@ -26,3 +27,4 @@
     "nodemon": "^3.0.2"
   }
 }
+
